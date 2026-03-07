@@ -1,0 +1,18 @@
+# Sample books (local only — copyrighted content)
+Sample txt files/
+
+# PyInstaller build artefacts
+build/
+dist/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Local build output and temp directories
+Output/
+%TEMP%/
+
+# Backup files
+*.bak*
