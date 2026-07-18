@@ -46,6 +46,7 @@ class TextProcessor:
         re.compile(r"^\d{1,3}\.\s+[A-Z\u00C0-\u024F].{0,80}$"),
         re.compile(r"^[IVXLCDMivxlcdm]{1,6}\.\s+[A-Z\u00C0-\u024F].{2,80}$"),
         re.compile(r"^(act|scene)\s+[\dIVXLCDMivxlcdm]+(\s*[:\-\u2013\u2014.]\s*.{0,80})?$", re.IGNORECASE),
+        re.compile(r"^\d{1,3}\s*[-\u2013\u2014]\s+\S.{0,78}$"),  # "1 - The Slow Fuse"
     ]
 
     # Rubrikkandidat vars text aterkommer sa har manga ganger ar sannolikt
@@ -53,6 +54,14 @@ class TextProcessor:
     # matchar ett explicit monster (skyddar "CHAPTER I" som repeteras
     # legitimt over delar i t.ex. Crime and Punishment)
     REPEAT_SUPPRESS_THRESHOLD = 3
+
+    # Dominant monster-undertryckning: nar minst sa har manga kandidater OCH
+    # en sa har stor andel matchar explicita monster ar de ovriga kandidaterna
+    # (unika ALL-CAPS-scenmarkorer, ortsnamn, telegramrader) sannolikt inte
+    # kapitel. Andelskravet skyddar bocker dar merparten rubriker ar legitimt
+    # monsterlosa (diktsamlingar: Leaves of Grass ~25 % explicit).
+    DOMINANT_MIN_COUNT = 10
+    DOMINANT_MIN_FRACTION = 0.6
 
     @classmethod
     def is_chapter_heading(cls, line, prev_blank, next_blank):
@@ -255,6 +264,23 @@ class TextProcessor:
         return kept
 
     @classmethod
+    def _suppress_nondominant(cls, chapter_starts):
+        """Filtrera icke-explicita kandidater nar de explicita monstren
+        dominerar (se DOMINANT_MIN_*). Alla explicita monster overlever —
+        blandade strukturer (PART + CHAPTER, ACT + SCENE) rors inte."""
+        if not chapter_starts:
+            return chapter_starts
+        explicit = [
+            any(p.match(title) for p in cls.EXPLICIT_PATTERNS)
+            for _, title in chapter_starts
+        ]
+        n_explicit = sum(explicit)
+        if (n_explicit >= cls.DOMINANT_MIN_COUNT
+                and n_explicit / len(chapter_starts) >= cls.DOMINANT_MIN_FRACTION):
+            return [cs for cs, is_exp in zip(chapter_starts, explicit) if is_exp]
+        return chapter_starts
+
+    @classmethod
     def detect_chapters(cls, text):
         lines = text.split("\n")
         n = len(lines)
@@ -265,6 +291,7 @@ class TextProcessor:
             if cls.is_chapter_heading(line, prev_blank, next_blank):
                 chapter_starts.append((i, line.strip()))
         chapter_starts = cls._suppress_repeated(chapter_starts)
+        chapter_starts = cls._suppress_nondominant(chapter_starts)
         if not chapter_starts:
             return [("Content", text.strip())]
         chapters = []

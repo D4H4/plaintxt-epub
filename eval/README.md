@@ -57,6 +57,13 @@ Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
 | 1 | Gutenberg-stripper (moderna \*\*\*-markörer + 90-tals-Etext); facit-sidan PG-filtrerad symmetriskt | 0.375/0.427/0.400 | 0.563/0.554/0.559 |
 | 2 | Pjäsfixen: ACT/SCENE-mönster, upprepnings-undertryckning (≥ 3, explicit-mönster skyddade), avvisa `[`/`(`-rader och ALL-CAPS med komma | 0.817/0.511/0.629 | 0.563/0.554/0.559 |
 
+| 3 | `N - Titel`-mönster + dominant-undertryckning (icke-explicita kandidater stryks när explicita ≥ 10 st och ≥ 60 %) | 0.946/0.535/0.683 | 0.563/0.554/0.559 |
+
+Sprint 3 per bok (kapitel-F1): RSR 0.614→0.930, P&P 0.919→**1.000**,
+Dracula 0.667→0.947, C&P-P →1.000. Kostnad: Hamlet-R −2 (Dramatis Personæ,
+"SCENE. Elsinore." — icke-explicita), Dracula-R −1 ("NOTE").
+Andelskravet skyddar Leaves (25 % explicit → orörd). Corpus-Hamlet 27 exakt.
+
 Sprint 2 per bok (kapitel-F1): Hamlet 0.185→0.778 (27 pred mot 27 facit),
 Dracula 0.333→0.667 (undertitel-suppressionen ger bare "CHAPTER N" rätt titel),
 RSR 0.021→0.614 (upprepade + komma-markörer borta; resten sprint 3).
