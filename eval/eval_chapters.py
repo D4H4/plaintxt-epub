@@ -29,8 +29,7 @@ SYNTHETIC = frozenset(["Introduction", "Content"])
 
 
 def predicted_titles(txt_path):
-    with open(txt_path, encoding="utf-8", errors="replace") as f:
-        raw = f.read()
+    raw = TextProcessor.read_text_file(txt_path)
     cleaned = TextProcessor.clean_text(raw)
     chapters = TextProcessor.detect_chapters(cleaned)
     titles = [t for t, _ in chapters]

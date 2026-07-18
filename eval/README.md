@@ -61,6 +61,13 @@ Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
 
 | 4 | Avdelarsidor (explicit rubrik utan brödtext behålls; svit ≥ 3 = TOC → släng), ensam romersk siffra som mönster, egen titelregel (apostrofer/funktionsord) + fem avvisningar (kolumnlayout, sidnummer, scenanvisningar, talarcues, `;`/`:`) | 0.910/0.817/0.861 | 0.563/0.554/0.559 |
 
+| 5 | Robusthet: encoding-sniff (BOM→utf-8→cp1252), utfallsbaserad strukturvarning (stor fil + ≤ 1 kapitel), skräpfilsfilter i batch (< 5 KB) | 0.910/0.817/0.861 (oförändr.) | 0.563/0.554/0.559 (oförändr.) |
+
+Sprint 5 ändrar inte mätvärdena (golden set är ren utf-8 med struktur) —
+vinsterna ligger i korpusen: Foundation and Empire läses nu utan
+�-artefakter (cp1252), DragonRider gick 1→3 kapitel av encoding-fixen,
+1984/F&E får varning i stället för tyst 1-kapitel-output.
+
 Sprint 4 per bok (kapitel-F1): C&P 0.990 (PART-avdelarna + epilogens I/II),
 Leaves 0.485→0.801 (recall 0.33→0.73 — titelregeln), Dracula 0.931,
 Hamlet 0.926 (akterna återtagna som avdelarsidor). P&P/RSR oförändrade

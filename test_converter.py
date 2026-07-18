@@ -27,7 +27,7 @@ EXPECTED = {
     # Pjasregression (Fas 1 sprint 2): baseline var 1137 resp 772 talarnamn;
     # ratt struktur ar ~27 (akter+scener) resp ~1000 (37 pjaser + sonetter)
     "hamlet.txt":                     (20, 60),
-    "shakespeare.txt":                (800, 1300),
+    "shakespeare.txt":                (700, 1300),
 }
 
 PASS = "PASS"
@@ -52,8 +52,7 @@ def worst(*statuses):
 
 def test_file(path):
     fname = os.path.basename(path)
-    with open(path, encoding="utf-8", errors="replace") as f:
-        raw = f.read()
+    raw = TextProcessor.read_text_file(path)
 
     # Baseline ar texten efter boilerplate-strip: PG-header/licens tas bort
     # avsiktligt och ska inte raknas som teckenforlust

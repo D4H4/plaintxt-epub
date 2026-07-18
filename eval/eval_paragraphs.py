@@ -33,8 +33,7 @@ def facit_paragraphs(epub_path):
 
 
 def predicted_paragraphs(txt_path):
-    with open(txt_path, encoding="utf-8", errors="replace") as f:
-        raw = f.read()
+    raw = TextProcessor.read_text_file(txt_path)
     cleaned = TextProcessor.clean_text(raw)
     paras = re.split(r"\n{2,}", cleaned)
     return [n for n in (norm_para(p) for p in paras) if n]

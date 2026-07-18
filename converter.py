@@ -196,6 +196,51 @@ class TextProcessor:
         r"|\*{0,5}\s*End of (the |this )?Project Gutenberg('s)?\s+(Etext|EBook)\b)",
         re.IGNORECASE | re.MULTILINE)
 
+    @staticmethod
+    def read_text_file(path):
+        """Las en textfil med encoding-sniff: BOM forst, sedan strikt utf-8,
+        sedan cp1252 (vanligast bland gamla e-bocker — maskerades tidigare
+        till � av errors='replace'), sist utf-8 med ersattning."""
+        with open(path, "rb") as f:
+            data = f.read()
+        if data[:3] == b"\xef\xbb\xbf":
+            return data.decode("utf-8-sig")
+        if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            return data.decode("utf-16")
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                return data.decode("cp1252")
+            except UnicodeDecodeError:
+                return data.decode("utf-8", errors="replace")
+
+    # Strukturvarning (klass B): en stor bok som ger <= 1 kapitel ar nastan
+    # alltid strukturlos input (en-radare, stycke-per-rad med inbakade
+    # rubriker) — varna i stallet for att tyst leverera 1 kapitel.
+    # Utfallsbaserad avsiktligt: stycke-per-rad MED blankrader fungerar fint
+    # och ska inte flaggas. p90-radlangden anvands bara som forklaring
+    # (radbruten text haller sig under ~80 tecken).
+    STRUCTURE_MIN_SIZE = 50_000  # tecken; mindre kan legitimt sakna kapitel
+
+    @classmethod
+    def structure_warning(cls, text, n_chapters):
+        """Returnerar varningsstrang nar en stor text gav <= 1 kapitel."""
+        if n_chapters > 1 or len(text) < cls.STRUCTURE_MIN_SIZE:
+            return None
+        lengths = sorted(len(l) for l in text.split("\n") if l.strip())
+        if not lengths:
+            return None
+        p90 = lengths[min(len(lengths) - 1, int(len(lengths) * 0.90))]
+        if p90 > 150:
+            reason = ("The file looks like a one-line or paragraph-per-line "
+                      "export (90th-percentile line length " + str(p90)
+                      + " chars; hard-wrapped text stays under ~80).")
+        else:
+            reason = "No line matched any known chapter-heading pattern."
+        return ("No chapter structure found in this large file. " + reason
+                + " The EPUB will be one single continuous chapter.")
+
     @classmethod
     def strip_boilerplate(cls, text):
         """Strip Project Gutenberg header/footer via *** START/END markers.
@@ -1154,12 +1199,17 @@ class ConverterApp:
             self.root.update()
 
             try:
-                with open(item.path, "r", encoding="utf-8", errors="replace") as f:
-                    raw = f.read()
+                if os.path.getsize(item.path) < 5 * 1024:
+                    # Skrapfiler (torrent-reklam, "read me" o.d.) — hoppa over
+                    self._set_item_status(item, "Skipped - tiny file (< 5 KB)", MUTED)
+                    continue
+                raw = TextProcessor.read_text_file(item.path)
+                struct_warn = None
                 text = TextProcessor.clean_text(raw) if self.clean_lines.get() else raw
 
                 if self.auto_chapters.get():
                     chapters = TextProcessor.detect_chapters(text)
+                    struct_warn = TextProcessor.structure_warning(raw, len(chapters))
                     if item.auto_accept.get():
                         # Use all detected chapters without showing the dialog
                         pass
@@ -1192,7 +1242,11 @@ class ConverterApp:
                     cover_path=item.cover_path or None,
                     output_path=out_path,
                 )
-                self._set_item_status(item, "\u2713 Done", "#2a9d2a")
+                if struct_warn:
+                    self._set_item_status(
+                        item, "\u26a0 Done - poor text structure", "#c77700")
+                else:
+                    self._set_item_status(item, "\u2713 Done", "#2a9d2a")
 
             except Exception as exc:
                 self._set_item_status(item, "\u2717 " + str(exc)[:30], "#cc2222")
@@ -1200,7 +1254,8 @@ class ConverterApp:
             self.root.update()
 
         self.convert_btn.config(state="normal")
-        done = sum(1 for i in self._queue if i.status_var.get().startswith("\u2713"))
+        done = sum(1 for i in self._queue
+                   if i.status_var.get().startswith(("\u2713", "\u26a0 Done")))
         self.status_msg.set(
             "Batch complete: " + str(done) + "/" + str(total)
             + " converted.  Output: " + out_dir
@@ -1466,8 +1521,7 @@ class ConverterApp:
         # Read, clean, detect on main thread so dialog can run synchronously
         self.status_msg.set("Reading file...")
         self.root.update()
-        with open(txt, "r", encoding="utf-8", errors="replace") as f:
-            raw_text = f.read()
+        raw_text = TextProcessor.read_text_file(txt)
         raw_cc = sum(1 for c in raw_text if not c.isspace())
         text = raw_text
         if self.clean_lines.get():
@@ -1478,6 +1532,9 @@ class ConverterApp:
             self.status_msg.set("Detecting chapters...")
             self.root.update()
             chapters = TextProcessor.detect_chapters(text)
+            warning = TextProcessor.structure_warning(raw_text, len(chapters))
+            if warning:
+                messagebox.showwarning("No chapter structure", warning)
             dlg = ChapterVerifyDialog(self.root, chapters)
             if dlg.result is None:
                 self.status_msg.set("Cancelled.")
