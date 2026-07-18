@@ -100,11 +100,14 @@ def test_file(path):
     else:
         results.append(check(FAIL, "chapter-count >= 1", "0 chapters detected"))
 
-    # 5. No single-char-token false positives in headings
+    # 5. No single-char-token false positives in headings.
+    # Rubriker som matchar ett explicit monster (t.ex. ensam romersk siffra,
+    # "II" -- legitima kapitel i Notes from the Underground) ar inte misstankta.
     bad = [
         t for t, _ in chapters
         if re.findall(r"[A-Za-z]+", t)
         and not any(len(w) >= 3 for w in re.findall(r"[A-Za-z]+", t))
+        and not any(p.match(t) for p in TextProcessor.EXPLICIT_PATTERNS)
     ]
     if not bad:
         results.append(check(PASS, "no-false-pos-headings", "ok"))

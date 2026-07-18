@@ -59,6 +59,14 @@ Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
 
 | 3 | `N - Titel`-mönster + dominant-undertryckning (icke-explicita kandidater stryks när explicita ≥ 10 st och ≥ 60 %) | 0.946/0.535/0.683 | 0.563/0.554/0.559 |
 
+| 4 | Avdelarsidor (explicit rubrik utan brödtext behålls; svit ≥ 3 = TOC → släng), ensam romersk siffra som mönster, egen titelregel (apostrofer/funktionsord) + fem avvisningar (kolumnlayout, sidnummer, scenanvisningar, talarcues, `;`/`:`) | 0.910/0.817/0.861 | 0.563/0.554/0.559 |
+
+Sprint 4 per bok (kapitel-F1): C&P 0.990 (PART-avdelarna + epilogens I/II),
+Leaves 0.485→0.801 (recall 0.33→0.73 — titelregeln), Dracula 0.931,
+Hamlet 0.926 (akterna återtagna som avdelarsidor). P&P/RSR oförändrade
+efter avvisningsreglerna (titelregeln läckte först: P&P→0.667, verken→1940;
+kolumnlayout/sidnummer/scenanvisnings-avvisningarna tog tillbaka allt).
+
 Sprint 3 per bok (kapitel-F1): RSR 0.614→0.930, P&P 0.919→**1.000**,
 Dracula 0.667→0.947, C&P-P →1.000. Kostnad: Hamlet-R −2 (Dramatis Personæ,
 "SCENE. Elsinore." — icke-explicita), Dracula-R −1 ("NOTE").

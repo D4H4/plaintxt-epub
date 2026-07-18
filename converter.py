@@ -47,6 +47,7 @@ class TextProcessor:
         re.compile(r"^[IVXLCDMivxlcdm]{1,6}\.\s+[A-Z\u00C0-\u024F].{2,80}$"),
         re.compile(r"^(act|scene)\s+[\dIVXLCDMivxlcdm]+(\s*[:\-\u2013\u2014.]\s*.{0,80})?$", re.IGNORECASE),
         re.compile(r"^\d{1,3}\s*[-\u2013\u2014]\s+\S.{0,78}$"),  # "1 - The Slow Fuse"
+        re.compile(r"^[IVXLCDM]{1,7}\.?$"),  # ensam romersk siffra (epilogkapitel)
     ]
 
     # Rubrikkandidat vars text aterkommer sa har manga ganger ar sannolikt
@@ -62,6 +63,9 @@ class TextProcessor:
     # monsterlosa (diktsamlingar: Leaves of Grass ~25 % explicit).
     DOMINANT_MIN_COUNT = 10
     DOMINANT_MIN_FRACTION = 0.6
+
+    # Sa har manga brodtextlosa rubriker i rad tolkas som innehallsforteckning
+    TOC_RUN = 3
 
     @classmethod
     def is_chapter_heading(cls, line, prev_blank, next_blank):
@@ -84,9 +88,21 @@ class TextProcessor:
         # Reject stage directions / metadata in brackets: [Exit], (Continued)
         if line[0] in ('[', '('):
             return False
-        if line[-1] in ('?', '!'):
+        if line[-1] in ('?', '!', ';', ':'):
+            return False
+        # Kolumnlayout (TOC-listor, illustrationsforteckningar med sidnummer):
+        # inre whitespace-korning eller avslutande rent tal
+        if re.search(r"\s{3,}", line):
             return False
         words = line.split()
+        if words[-1].isdigit():
+            return False
+        # Scenanvisningar och talarrepliker i pjaser
+        if re.match(r"(re-)?(enter|exit|exeunt)\b", line, re.IGNORECASE):
+            return False
+        first = words[0]
+        if first.endswith('.') and len(first) > 2 and first[:-1].isupper():
+            return False  # "CORNELIUS. Your Highness" — talarcue
         # Reject closing signatures: ALL-CAPS, ends with '.', <= 3 words (e.g. 'S. VERNON.')
         if line.isupper() and line.endswith('.') and len(words) <= 3:
             return False
@@ -99,9 +115,23 @@ class TextProcessor:
             return False
         # Require at least 2 words for title-case heuristic (single-word headings
         # like Prologue/Epilogue are already matched by EXPLICIT_PATTERNS above).
-        if 2 <= len(words) <= 8 and line.istitle() and ',' not in line and not line.endswith('.'):
-            return True
+        # Egen titelregel i stallet for str.istitle(): apostrofer/bindestreck
+        # ("One's-Self I Sing") och gemena funktionsord ("As I Ponder'd in
+        # Silence") ska inte falla en akta titel.
+        if 2 <= len(words) <= 8 and ',' not in line and not line.endswith('.'):
+            if words[0][0].isupper() and all(cls._title_word(w) for w in words):
+                return True
         return False
+
+    _TITLE_FUNC_WORDS = frozenset(
+        "a an the of in on at to for by with from and or nor as o'er".split())
+
+    @classmethod
+    def _title_word(cls, word):
+        c = word[0]
+        if c.isupper() or c.isdigit():
+            return True
+        return c.islower() and word.lower() in cls._TITLE_FUNC_WORDS
 
     @classmethod
     def _wrap_width(cls, text, lf):
@@ -294,6 +324,31 @@ class TextProcessor:
         chapter_starts = cls._suppress_nondominant(chapter_starts)
         if not chapter_starts:
             return [("Content", text.strip())]
+        # Brodtextlosa rubriker: en ensam ar en avdelarsida (PART I fore
+        # CHAPTER I, ACT I fore SCENE I) och behalls om den ar explicit;
+        # en svit om >= TOC_RUN i rad ar en innehallsforteckning -> slang.
+        n_starts = len(chapter_starts)
+        empty = []
+        for idx, (line_idx, _) in enumerate(chapter_starts):
+            end_idx = chapter_starts[idx + 1][0] if idx + 1 < n_starts else n
+            empty.append(not "\n".join(lines[line_idx + 1:end_idx]).strip())
+        keep = [True] * n_starts
+        idx = 0
+        while idx < n_starts:
+            if empty[idx]:
+                run_end = idx
+                while run_end < n_starts and empty[run_end]:
+                    run_end += 1
+                is_toc = run_end - idx >= cls.TOC_RUN
+                for k in range(idx, run_end):
+                    keep[k] = not is_toc and any(
+                        p.match(chapter_starts[k][1]) for p in cls.EXPLICIT_PATTERNS)
+                idx = run_end
+            else:
+                idx += 1
+        chapter_starts = [cs for cs, kp in zip(chapter_starts, keep) if kp]
+        if not chapter_starts:
+            return [("Content", text.strip())]
         chapters = []
         pre = "\n".join(lines[:chapter_starts[0][0]]).strip()
         if pre:
@@ -301,8 +356,6 @@ class TextProcessor:
         for idx, (line_idx, title) in enumerate(chapter_starts):
             end_idx = chapter_starts[idx + 1][0] if idx + 1 < len(chapter_starts) else n
             body = "\n".join(lines[line_idx + 1:end_idx]).strip()
-            if not body:
-                continue  # skip headings with no body (e.g. author bylines)
             chapters.append((title, body))
         if not chapters:
             return [("Content", text.strip())]
