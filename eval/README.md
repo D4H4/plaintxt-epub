@@ -1,0 +1,50 @@
+# Utvärderingsramverk (Fas 0.5)
+
+Mäter konverteringskvalitet mot golden set i `eval/golden/` (gitignorad —
+innehåller upphovsrättsskyddat material; PG-paren går att tanka om från
+Project Gutenberg, samma utgåva som txt:n).
+
+## Skript
+
+| Skript | Vad |
+|---|---|
+| `eval_chapters.py` | Kapitel-P/R/F1: `detect_chapters` mot `*.chapters-facit.txt`. Flagga `-v` listar missade/falska rubriker. |
+| `eval_paragraphs.py` | Stycke-P/R/F1: `clean_text`-stycken mot PG-epubens `<p>` (+ strofer ur `pgmonospaced`-versblock). Multiset-matchning på normaliserat innehåll — fel styckegräns straffar både split och join. `-v` visar exempel. |
+| `make_chapter_facit.py` | Skriver facit-UTKAST (`*.chapters-draft.txt`) från epub-rubriker (h1–h6) för manuell kuratering till `*.chapters-facit.txt`. |
+| `epub_extract.py` | Delad epub-extraktion (spine-ordning ur OPF, rubriker, stycken, strofer). Stdlib only. |
+| `corpus_diag.py` | Korpusdiagnostik: kör pipelinen över hela Drive-samlingen → `corpus_results.csv` + rapport. |
+| `diag_headings.py` | Engångsundersökning av rubrikformat i korpusens detekteringsmissar. |
+| `stress_test.py` | Snabbtest av pjäsexplosionen på `samples/hamlet.txt`. |
+
+`samples/` innehåller public domain-texter för diagnostik (Drive-korpusens utgåvor,
+skiljer sig från PG-paren i `golden/`).
+
+Körning: `python eval/eval_chapters.py` från repo-roten (inga beroenden utöver stdlib).
+
+## Facit
+
+- `<bok>.chapters-facit.txt` — en kapitelrubrik per rad i läsordning.
+  Kurateringsprincip för PG-paren: PG-epubens rubrikstruktur är referensen,
+  minus boilerplate (PG-header, licens, Contents, halvtitlar, bylines).
+  P&P: illustrationstexter bortklippta ur rubrikerna. RSR: manuellt facit
+  ur pappersboken/txt:n.
+- Kapitelträff: normaliserade titlar lika ELLER prediktionens tokens är
+  prefix av facit-tokens (epub-facit slår ofta ihop rubrik + undertitel).
+  Matchning i läsordning (LCS).
+
+## Känt brus (accepterat)
+
+- Rubrikrader ligger kvar som stycken i predikterad text men är exkluderade
+  (h-taggar) ur styckefacit; PG-boilerplate skiljer något mellan txt och epub.
+- Hamlet-styckesiffran domineras av versdialog (epub: `<p>` per replik) —
+  det är dialog/vers-dimensionen, mäts medvetet här tills separat mätning finns.
+
+## Baseline 2026-07-18 (att slå i Fas 1)
+
+Kapitel (P/R/F1): C&P 0.932/0.837/0.882 · Dracula 0.261/0.429/0.324 ·
+Hamlet 0.150/0.222/0.179 · Leaves 0.906/0.332/0.485 · P&P 0.827/1.000/0.905 ·
+RSR 0.012/0.095/0.021 · **TOTALT 0.369/0.427/0.396**
+
+Stycken (P/R/F1): C&P 0.875/0.943/0.908 · Dracula 0.812/0.938/0.870 ·
+Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
+**TOTALT 0.556/0.555/0.555**

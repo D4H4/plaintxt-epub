@@ -16,3 +16,9 @@ Output/
 
 # Backup files
 *.bak*
+
+# Golden set - innehaller upphovsrattsskyddat material (Clancy); PG-filerna ok men mappen halls utanfor
+eval/golden/
+
+# Korpusdiagnostikens radata - filnamn ur privat samling, ska inte publiceras
+eval/corpus_results.csv
