@@ -133,8 +133,34 @@ class TextProcessor:
         best = max(range(len(counts)), key=lambda i: counts[i])
         return best if counts[best] >= 3 else None
 
+    # Tva generationer PG-markorer: moderna "*** START/END OF THE PROJECT
+    # GUTENBERG EBOOK ***" och 90-talets Etext-format ("*END*THE SMALL
+    # PRINT!..." avslutar headern, "**End of The Project Gutenberg Etext...")
+    _PG_START = re.compile(
+        r"^\s*(\*{3}\s*START OF (THE|THIS) PROJECT GUTENBERG EBOOK\b.*"
+        r"|\*END\*THE SMALL PRINT![^\n]*)$",
+        re.IGNORECASE | re.MULTILINE)
+    _PG_END = re.compile(
+        r"^\s*(\*{3}\s*END OF (THE|THIS) PROJECT GUTENBERG EBOOK\b"
+        r"|\*{0,5}\s*End of (the |this )?Project Gutenberg('s)?\s+(Etext|EBook)\b)",
+        re.IGNORECASE | re.MULTILINE)
+
+    @classmethod
+    def strip_boilerplate(cls, text):
+        """Strip Project Gutenberg header/footer via *** START/END markers.
+        Positional guards (start marker in first half, end marker in second)
+        so a book merely quoting the markers is left alone."""
+        m = cls._PG_START.search(text)
+        if m and m.start() < len(text) // 2:
+            text = text[m.end():]
+        matches = list(cls._PG_END.finditer(text))
+        if matches and matches[-1].start() > len(text) // 2:
+            text = text[:matches[-1].start()]
+        return text
+
     @classmethod
     def clean_text(cls, text):
+        text = cls.strip_boilerplate(text)
         cr, lf = chr(13), chr(10)
         text = text.replace(cr + cr + lf, lf)  # handle \r\r\n artifact
         text = text.replace(cr + lf, lf).replace(cr, lf)

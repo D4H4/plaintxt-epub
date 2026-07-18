@@ -48,3 +48,14 @@ RSR 0.012/0.095/0.021 · **TOTALT 0.369/0.427/0.396**
 Stycken (P/R/F1): C&P 0.875/0.943/0.908 · Dracula 0.812/0.938/0.870 ·
 Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
 **TOTALT 0.556/0.555/0.555**
+
+## Fas 1-logg
+
+| Sprint | Ändring | Kapitel totalt | Stycken totalt |
+|---|---|---|---|
+| Baseline | — | 0.369/0.427/0.396 | 0.556/0.555/0.555 |
+| 1 | Gutenberg-stripper (moderna \*\*\*-markörer + 90-tals-Etext); facit-sidan PG-filtrerad symmetriskt | 0.375/0.427/0.400 | 0.563/0.554/0.559 |
+
+Sprint 1 syns mest utanför totalen: C&P kapitel-P 0.932→0.976, P&P F1 0.905→0.925,
+Notes from the Underground 19→10 kapitel (licensskräpet borta). Testsvitens
+char-preservation mäter nu mot strippad baseline (avsiktlig borttagning ≠ förlust).

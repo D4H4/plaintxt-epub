@@ -50,10 +50,13 @@ def test_file(path):
     with open(path, encoding="utf-8", errors="replace") as f:
         raw = f.read()
 
-    raw_cc = nonws(raw)
+    # Baseline ar texten efter boilerplate-strip: PG-header/licens tas bort
+    # avsiktligt och ska inte raknas som teckenforlust
+    stripped = TextProcessor.strip_boilerplate(raw)
+    raw_cc = nonws(stripped)
     # Expected em-dash savings: each '--+' sequence loses (len-1) non-ws chars
     import re as _re
-    dash_savings = sum(len(m) - 1 for m in _re.findall(r"--+", raw))
+    dash_savings = sum(len(m) - 1 for m in _re.findall(r"--+", stripped))
     adjusted_raw_cc = raw_cc - dash_savings
     cleaned = TextProcessor.clean_text(raw)
     clean_cc = nonws(cleaned)

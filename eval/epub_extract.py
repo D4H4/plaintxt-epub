@@ -93,21 +93,45 @@ def _spine_hrefs(z):
     return hrefs
 
 
-def extract(epub_path):
+_PG_MARKER = re.compile(
+    r"^\s*\*{3}\s*(START|END) OF (THE|THIS) PROJECT GUTENBERG", re.IGNORECASE)
+
+
+def _strip_pg_items(items):
+    """Filtrera PG-boilerplate ur item-strommen (symmetri med
+    TextProcessor.strip_boilerplate pa txt-sidan): header-sektionen
+    ("The Project Gutenberg eBook of ..." fram till nasta rubrik),
+    ***-markorstycken, och allt fran licensrubriken och ut."""
+    out = []
+    skip = False
+    for tag, text in items:
+        if tag != "p":
+            n = norm_title(text)
+            if "projectgutenberglicense" in n:
+                break
+            skip = n.startswith("theprojectgutenbergebook")
+            if not skip:
+                out.append((tag, text))
+        elif not skip and not _PG_MARKER.match(text):
+            out.append((tag, text))
+    return out
+
+
+def extract(epub_path, strip_pg=True):
     """Returnerar (headings, paragraphs) ur epuben i lasordning.
     headings: lista av (tag, text); paragraphs: lista av text."""
-    headings, paragraphs = [], []
+    items = []
     with zipfile.ZipFile(epub_path) as z:
         for href in _spine_hrefs(z):
             if not href.lower().endswith((".html", ".xhtml", ".htm")):
                 continue
             parser = _DocParser()
             parser.feed(z.read(href).decode("utf-8", errors="replace"))
-            for tag, text in parser.items:
-                if tag == "p":
-                    paragraphs.append(text)
-                else:
-                    headings.append((tag, text))
+            items.extend(parser.items)
+    if strip_pg:
+        items = _strip_pg_items(items)
+    headings = [(tag, text) for tag, text in items if tag != "p"]
+    paragraphs = [text for tag, text in items if tag == "p"]
     return headings, paragraphs
 
 
