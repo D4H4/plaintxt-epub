@@ -45,7 +45,14 @@ class TextProcessor:
             r"(\s*[:\-\u2013\u2014.]\s*.{0,80})?$", re.IGNORECASE),
         re.compile(r"^\d{1,3}\.\s+[A-Z\u00C0-\u024F].{0,80}$"),
         re.compile(r"^[IVXLCDMivxlcdm]{1,6}\.\s+[A-Z\u00C0-\u024F].{2,80}$"),
+        re.compile(r"^(act|scene)\s+[\dIVXLCDMivxlcdm]+(\s*[:\-\u2013\u2014.]\s*.{0,80})?$", re.IGNORECASE),
     ]
+
+    # Rubrikkandidat vars text aterkommer sa har manga ganger ar sannolikt
+    # talarnamn i pjas (BERNARDO, HAMLET ...) \u2014 undertrycks om den inte
+    # matchar ett explicit monster (skyddar "CHAPTER I" som repeteras
+    # legitimt over delar i t.ex. Crime and Punishment)
+    REPEAT_SUPPRESS_THRESHOLD = 3
 
     @classmethod
     def is_chapter_heading(cls, line, prev_blank, next_blank):
@@ -65,6 +72,9 @@ class TextProcessor:
         _OPEN_QUOTES = ('"', '\u201c', "'", '\u2018', '\u2019')
         if line[0] in _OPEN_QUOTES:
             return False
+        # Reject stage directions / metadata in brackets: [Exit], (Continued)
+        if line[0] in ('[', '('):
+            return False
         if line[-1] in ('?', '!'):
             return False
         words = line.split()
@@ -72,7 +82,9 @@ class TextProcessor:
         if line.isupper() and line.endswith('.') and len(words) <= 3:
             return False
         if line.isupper() and len(line) >= 3 and re.search(r"[A-Z]", line):
-            return True
+            # ...men inte med komma: talarkombos ("CORNELIUS, VOLTIMAND"),
+            # ortsmarkorer ("SUNNYVALE, CALIFORNIA"), datumrader
+            return "," not in line
         # Reject 'Speaker: Dialogue' patterns (e.g. 'Smith: Yes.' or 'Author: Name')
         if any(w.endswith(':') for w in words[:-1]):
             return False
@@ -225,6 +237,24 @@ class TextProcessor:
         return (lf + lf + lf).join((lf + lf).join(b) for b in result_blocks)
 
     @classmethod
+    def _suppress_repeated(cls, chapter_starts):
+        """Filtrera rubrikkandidater som upprepas >= troskeln utan att matcha
+        nagot explicit monster — talarnamn i pjaser, scenmarkorer o.d.
+        Undertryckta rader lamnas kvar i brodtexten."""
+        counts = {}
+        for _, title in chapter_starts:
+            key = " ".join(title.split()).casefold()
+            counts[key] = counts.get(key, 0) + 1
+        kept = []
+        for i, title in chapter_starts:
+            key = " ".join(title.split()).casefold()
+            if counts[key] >= cls.REPEAT_SUPPRESS_THRESHOLD and not any(
+                    p.match(title) for p in cls.EXPLICIT_PATTERNS):
+                continue
+            kept.append((i, title))
+        return kept
+
+    @classmethod
     def detect_chapters(cls, text):
         lines = text.split("\n")
         n = len(lines)
@@ -234,6 +264,7 @@ class TextProcessor:
             next_blank = (i == n - 1) or (not lines[i + 1].strip())
             if cls.is_chapter_heading(line, prev_blank, next_blank):
                 chapter_starts.append((i, line.strip()))
+        chapter_starts = cls._suppress_repeated(chapter_starts)
         if not chapter_starts:
             return [("Content", text.strip())]
         chapters = []

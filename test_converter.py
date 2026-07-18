@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from converter import TextProcessor, EPUBBuilder, HAS_EPUB
 
 SAMPLE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Sample txt files")
+EVAL_SAMPLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval", "samples")
 
 # Soft expectations: (min_chapters, max_chapters)
 EXPECTED = {
@@ -23,6 +24,10 @@ EXPECTED = {
     "Stranger In A Strange Land.txt": (1, 80),
     "Double Star.txt":                (1, 80),
     "2010 Odissey Two.txt":           (1, 80),
+    # Pjasregression (Fas 1 sprint 2): baseline var 1137 resp 772 talarnamn;
+    # ratt struktur ar ~27 (akter+scener) resp ~1000 (37 pjaser + sonetter)
+    "hamlet.txt":                     (20, 60),
+    "shakespeare.txt":                (800, 1300),
 }
 
 PASS = "PASS"
@@ -151,9 +156,13 @@ def main():
         print("ERROR: sample directory not found:", SAMPLE_DIR)
         sys.exit(1)
 
+    search_dirs = [SAMPLE_DIR]
+    if os.path.isdir(EVAL_SAMPLES_DIR):
+        search_dirs.append(EVAL_SAMPLES_DIR)
     txt_files = sorted(
         os.path.join(root, f)
-        for root, dirs, files in os.walk(SAMPLE_DIR)
+        for d in search_dirs
+        for root, dirs, files in os.walk(d)
         for f in files if f.lower().endswith(".txt")
     )
     if not txt_files:
@@ -164,7 +173,7 @@ def main():
     file_results = []
 
     for path in txt_files:
-        rel = os.path.relpath(path, SAMPLE_DIR)
+        rel = os.path.basename(path)
         print()
         print("=" * 64)
         print(rel)
