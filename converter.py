@@ -61,14 +61,17 @@ class TextProcessor:
     # (unika ALL-CAPS-scenmarkorer, ortsnamn, telegramrader) sannolikt inte
     # kapitel. Andelskravet skyddar bocker dar merparten rubriker ar legitimt
     # monsterlosa (diktsamlingar: Leaves of Grass ~25 % explicit).
+    # 0.55: Dracula hamnar pa 0.587 nar forlagsreklamen i baksidesmaterialet
+    # (15 ALL-CAPS boktitlar) raknas med — fortfarande langt over Leaves 25 %.
     DOMINANT_MIN_COUNT = 10
-    DOMINANT_MIN_FRACTION = 0.6
+    DOMINANT_MIN_FRACTION = 0.55
 
     # Sa har manga brodtextlosa rubriker i rad tolkas som innehallsforteckning
     TOC_RUN = 3
 
     @classmethod
     def is_chapter_heading(cls, line, prev_blank, next_blank):
+        indent = len(line) - len(line.lstrip())
         line = line.strip()
         if not line or len(line) > 100:
             return False
@@ -77,6 +80,11 @@ class TextProcessor:
         for pattern in cls.EXPLICIT_PATTERNS:
             if pattern.match(line):
                 return True
+        # Centrerade rader (djupt indrag) ar dekorationer — titelsidor,
+        # avsnittsmarkorer, forlagsreklam — inte kapitelrubriker, om de
+        # inte matchar ett explicit monster (ovan).
+        if indent >= 6:
+            return False
         # Reject single-char token patterns like "O O O O" or "C A S E : :"
         alpha_words = re.findall(r'[A-Za-z]+', line)
         if alpha_words and not any(len(w) >= 3 for w in alpha_words):
@@ -267,6 +275,48 @@ class TextProcessor:
         # Detect page/column wrap width to distinguish soft wraps from
         # intentional breaks (dialogue, verse, end of paragraph).
         wrap = cls._wrap_width(text, lf)
+        blocks = text.split(lf + lf)
+        result_blocks = []
+        for block in blocks:
+            orig_lines = [l for l in block.split(lf) if l.strip()]
+            if not orig_lines:
+                continue
+            stripped = [l.strip() for l in orig_lines]
+            if len(orig_lines) == 1:
+                # Behall vansterindraget: centrerade dekorationsrader
+                # (titelsidor, avsnittsmarkorer) avvisas pa det i
+                # is_chapter_heading. Strippas vid HTML-rendering.
+                result_blocks.append([orig_lines[0].rstrip()])
+                continue
+            # Versblock: indenterade rader (PG satter vers med 2+ mellanslags
+            # indrag; prosa och pjasrepliker ar vansterstallda) som inte
+            # fyller radbrytningsbredden. Radbrytningarna ar avsiktliga —
+            # bevara dem (renderas som <br/> i EPUB:en).
+            indented = sum(1 for l in orig_lines
+                           if l.startswith("  ") or l.startswith("\t"))
+            if indented * 3 >= len(orig_lines) * 2:
+                filled = sum(1 for l in stripped[:-1]
+                             if wrap is not None and len(l) >= wrap - 8)
+                if wrap is None or filled * 2 < len(stripped) - 1:
+                    result_blocks.append([lf.join(stripped)])
+                    continue
+            # Prosablock: blankradsavgransade block AR stycken — joina helt.
+            # Radjoin-heuristik pa blockniva var nettonegativ pa alla
+            # golden set-bocker (C&P 0.914 vs 0.998 for ren blockjoin).
+            # Undantag: jattelika block (ingen blankradsstruktur) far ga
+            # genom den gamla heuristiken i stallet for att bli ett
+            # monsterstycke.
+            if len(stripped) > 60:
+                result_blocks.append(cls._split_wrapped_block(stripped, wrap))
+            else:
+                result_blocks.append([chr(32).join(stripped)])
+        return (lf + lf + lf).join((lf + lf).join(b) for b in result_blocks)
+
+    @classmethod
+    def _split_wrapped_block(cls, raw_lines, wrap):
+        """Gamla hybrid-radjoinen: styckegissning inom ett block via
+        wrap-bredd + interpunktionssignaler. Anvands numera bara som
+        fallback for block utan blankradsstruktur (> 60 rader)."""
         # Sentence-terminal chars (by ordinal): . ! ? “ ‘
         SENT_END = frozenset([46, 33, 63, 8221, 8217])
         # Function words that signal mid-sentence continuation when at line end
@@ -274,51 +324,37 @@ class TextProcessor:
             "a an the of in on at to for by with from and but or nor as into "
             "that which than about over under after before".split()
         )
-        blocks = text.split(lf + lf)
-        result_blocks = []
-        for block in blocks:
-            raw_lines = [l.strip() for l in block.split(lf)]
-            raw_lines = [l for l in raw_lines if l]
-            if not raw_lines:
+        paras = []
+        current = [raw_lines[0]]
+        for i in range(1, len(raw_lines)):
+            prev = current[-1].rstrip()
+            prev_len = len(prev)
+            next_line = raw_lines[i]
+            # Primary: line hit the page wrap -> definitely join
+            if wrap is not None and prev_len >= wrap - 3:
+                current.append(next_line)
                 continue
-            if len(raw_lines) == 1:
-                result_blocks.append([raw_lines[0]])
-                continue
-            # Hybrid line-join: primary check is page-wrap width;
-            # secondary checks handle ragged-right cases where the next
-            # word is a long proper noun and the line falls short of threshold.
-            paras = []
-            current = [raw_lines[0]]
-            for i in range(1, len(raw_lines)):
-                prev = current[-1].rstrip()
-                prev_len = len(prev)
-                next_line = raw_lines[i]
-                # Primary: line hit the page wrap -> definitely join
-                if wrap is not None and prev_len >= wrap - 3:
-                    current.append(next_line)
-                    continue
-                # Secondary: layered continuation signals
-                last_ch = ord(prev[-1]) if prev else 0
-                if last_ch in SENT_END:
-                    # Sentence-terminal punctuation -> paragraph break
-                    paras.append(chr(32).join(current))
-                    current = [next_line]
-                elif next_line and (next_line[0].islower() or next_line[0].isdigit()):
-                    # Next starts lowercase or digit (e.g. “1880’s”) -> join
-                    current.append(next_line)
-                elif (prev.lower().rstrip(".,;:" + chr(39) + chr(34)).rsplit(None, 1) or [""])[-1] in CONT_WORDS:
-                    # Line ends with preposition/article/conjunction -> join
-                    current.append(next_line)
-                elif wrap is not None and prev_len >= wrap - 12:
-                    # Line within 12 chars of wrap width, no sent-punct -> join
-                    current.append(next_line)
-                else:
-                    # Conservative break
-                    paras.append(chr(32).join(current))
-                    current = [next_line]
-            paras.append(chr(32).join(current))
-            result_blocks.append(paras)
-        return (lf + lf + lf).join((lf + lf).join(b) for b in result_blocks)
+            # Secondary: layered continuation signals
+            last_ch = ord(prev[-1]) if prev else 0
+            if last_ch in SENT_END:
+                # Sentence-terminal punctuation -> paragraph break
+                paras.append(chr(32).join(current))
+                current = [next_line]
+            elif next_line and (next_line[0].islower() or next_line[0].isdigit()):
+                # Next starts lowercase or digit (e.g. “1880’s”) -> join
+                current.append(next_line)
+            elif (prev.lower().rstrip(".,;:" + chr(39) + chr(34)).rsplit(None, 1) or [""])[-1] in CONT_WORDS:
+                # Line ends with preposition/article/conjunction -> join
+                current.append(next_line)
+            elif wrap is not None and prev_len >= wrap - 12:
+                # Line within 12 chars of wrap width, no sent-punct -> join
+                current.append(next_line)
+            else:
+                # Conservative break
+                paras.append(chr(32).join(current))
+                current = [next_line]
+        paras.append(chr(32).join(current))
+        return paras
 
     @classmethod
     def _suppress_repeated(cls, chapter_starts):

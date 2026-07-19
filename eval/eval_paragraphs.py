@@ -35,8 +35,13 @@ def facit_paragraphs(epub_path):
 def predicted_paragraphs(txt_path):
     raw = TextProcessor.read_text_file(txt_path)
     cleaned = TextProcessor.clean_text(raw)
-    paras = re.split(r"\n{2,}", cleaned)
-    return [n for n in (norm_para(p) for p in paras) if n]
+    units = []
+    for p in re.split(r"\n{2,}", cleaned):
+        # Versblock bevarar radbrytningar (single \n, renderas <br/>) —
+        # varje rad ar en visuell enhet, symmetriskt med PG-epubarnas
+        # radnivamarkering av vers i facit.
+        units.extend(p.split("\n"))
+    return [n for n in (norm_para(p) for p in units) if n]
 
 
 def prf(hits, npred, nfacit):

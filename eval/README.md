@@ -63,6 +63,17 @@ Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
 
 | 5 | Robusthet: encoding-sniff (BOM→utf-8→cp1252), utfallsbaserad strukturvarning (stor fil + ≤ 1 kapitel), skräpfilsfilter i batch (< 5 KB) | 0.910/0.817/0.861 (oförändr.) | 0.563/0.554/0.559 (oförändr.) |
 
+| S1 stycken | Blockjoin (blankradsblock = stycke; gamla radjoinen kvar bara som fallback för block > 60 rader), versblock via indrag (2+ mellanslag, ej wrap-fyllda) bevarar radbrytningar (renderas `<br/>`), centrerade enradsblock (indrag ≥ 6) avvisas som rubrikkandidater, DOMINANT_MIN_FRACTION 0.6→0.55 (Draculas förlagsreklam gav 0.587) | 0.935/0.817/0.872 | 0.919/0.844/**0.880** |
+
+Styckesprint 1 per bok (stycke-F1): C&P 0.994, Dracula 0.954, Hamlet 0.947,
+P&P 0.904, Leaves 0.819 (R 0.743 — kvarvarande versblock som joinas fel).
+Kapitel-sidoeffekter: Dracula 0.931→**0.982** (centrerade dekorationer + reklam
+borta), Hamlet 0.962, RSR 0.964. Eval-symmetri: predikterade enheter är numera
+rader inom \n-bevarade block (speglar PG:s radnivåmarkering av vers i facit).
+Taktexperiment som styrde valet: ren blockjoin gav 0.998/0.987/0.956/0.911 på
+C&P/Hamlet/Dracula/P&P men 0.018 på Leaves; rad-per-stycke gav 0.986 på Leaves
+— grupperingen är allt, radjoin-heuristik på blocknivå var nettonegativ överallt.
+
 Sprint 5 ändrar inte mätvärdena (golden set är ren utf-8 med struktur) —
 vinsterna ligger i korpusen: Foundation and Empire läses nu utan
 �-artefakter (cp1252), DragonRider gick 1→3 kapitel av encoding-fixen,
