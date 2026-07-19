@@ -25,9 +25,12 @@ EXPECTED = {
     "Double Star.txt":                (1, 80),
     "2010 Odissey Two.txt":           (1, 80),
     # Pjasregression (Fas 1 sprint 2): baseline var 1137 resp 772 talarnamn;
-    # ratt struktur ar ~27 (akter+scener) resp ~1000 (37 pjaser + sonetter)
+    # ratt struktur ar ~27 (akter+scener) resp ~1000 (37 pjaser + sonetter).
+    # Golvet sankt 800->700 (sprint 5: encoding andrar kandidatmangden),
+    # 700->650 (styckesprint 2: versbevarandet tar bort ~12 strokandidater;
+    # 691 av 696 ar akta ACT/SCENE)
     "hamlet.txt":                     (20, 60),
-    "shakespeare.txt":                (700, 1300),
+    "shakespeare.txt":                (650, 1300),
 }
 
 PASS = "PASS"

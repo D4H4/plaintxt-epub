@@ -275,6 +275,15 @@ class TextProcessor:
         # Detect page/column wrap width to distinguish soft wraps from
         # intentional breaks (dialogue, verse, end of paragraph).
         wrap = cls._wrap_width(text, lf)
+        # Illustrationsmarkorer ("[Illustration]", "[Illustration: bildtext]",
+        # aven spannande flera stycken) pekar pa bilder som inte foljer med
+        # txt:n — brus for lasaren. Kapitelrubriker som PG bakat in i markoren
+        # ("[Illustration: ... Chapter I.]") maste overleva.
+        def _illustration_repl(m):
+            keep = [l.strip(" \t]") for l in m.group(0).split(lf)
+                    if re.match(r"\s*chapter\b", l, re.IGNORECASE)]
+            return (lf + lf).join(keep)
+        text = re.sub(r"\[Illustration[^\[\]]*\]", _illustration_repl, text)
         blocks = text.split(lf + lf)
         result_blocks = []
         for block in blocks:
@@ -295,9 +304,17 @@ class TextProcessor:
             indented = sum(1 for l in orig_lines
                            if l.startswith("  ") or l.startswith("\t"))
             if indented * 3 >= len(orig_lines) * 2:
-                filled = sum(1 for l in stripped[:-1]
-                             if wrap is not None and len(l) >= wrap - 8)
-                if wrap is None or filled * 2 < len(stripped) - 1:
+                # Indenterad PROSA (brev, blockcitat) skiljs fran vers pa
+                # att den ar jamn: uniform indentering och alla rader utom
+                # den sista wrap-fyllda. Vers ar ojamn i bade radlangd och
+                # indrag (Whitmans strofförster/wrappade fortsattningar).
+                indents = {len(l) - len(l.lstrip()) for l in orig_lines}
+                nf = [len(l) for l in stripped[:-1]]
+                uniform_fill = (
+                    wrap is not None and len(indents) == 1 and len(nf) >= 2
+                    and max(nf) - min(nf) <= 8
+                    and min(nf) >= wrap - 20)
+                if not uniform_fill:
                     result_blocks.append([lf.join(stripped)])
                     continue
             # Prosablock: blankradsavgransade block AR stycken — joina helt.

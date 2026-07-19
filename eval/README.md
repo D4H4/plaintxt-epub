@@ -65,6 +65,14 @@ Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
 
 | S1 stycken | Blockjoin (blankradsblock = stycke; gamla radjoinen kvar bara som fallback för block > 60 rader), versblock via indrag (2+ mellanslag, ej wrap-fyllda) bevarar radbrytningar (renderas `<br/>`), centrerade enradsblock (indrag ≥ 6) avvisas som rubrikkandidater, DOMINANT_MIN_FRACTION 0.6→0.55 (Draculas förlagsreklam gav 0.587) | 0.935/0.817/0.872 | 0.919/0.844/**0.880** |
 
+| S2 stycken | Wrap-fyllnadsskyddet ersatt med jämnhetstest (uniform indent + radlängdsrange ≤ 8 + nära wrap = indenterad prosa, annars vers), `[Illustration…]`-spann strippas (inbakade kapitelrubriker bevaras), testgolv verken 700→650 | 0.935/0.817/0.872 (oförändr.) | 0.945/0.990/**0.967** |
+
+Styckesprint 2 per bok (stycke-F1): C&P 0.995, Leaves 0.819→**0.980** (versblock
+med långa Whitman-rader klassades som prosa av fyllnadsskyddet — jämnhetstestet
+skiljer brev [66,66,66,64,65] från vers [19,55,27,39]), P&P 0.890 (illustrations-
+spann borta; resterande falska är frontmatter/TOC-dekor), Dracula 0.945,
+Hamlet 0.947. Verken 708→696 kapitel (12 strökandidater borta, 691 äkta ACT/SCENE).
+
 Styckesprint 1 per bok (stycke-F1): C&P 0.994, Dracula 0.954, Hamlet 0.947,
 P&P 0.904, Leaves 0.819 (R 0.743 — kvarvarande versblock som joinas fel).
 Kapitel-sidoeffekter: Dracula 0.931→**0.982** (centrerade dekorationer + reklam
