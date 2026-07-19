@@ -67,6 +67,15 @@ Hamlet 0.044/0.154/0.068 · Leaves 0.561/0.368/0.445 · P&P 0.752/0.946/0.838 ·
 
 | S2 stycken | Wrap-fyllnadsskyddet ersatt med jämnhetstest (uniform indent + radlängdsrange ≤ 8 + nära wrap = indenterad prosa, annars vers), `[Illustration…]`-spann strippas (inbakade kapitelrubriker bevaras), testgolv verken 700→650 | 0.935/0.817/0.872 (oförändr.) | 0.945/0.990/**0.967** |
 
+| S3 stycken | Korpusrobusthet: whitespace-rader → äkta blankrader (Ender-klassen: hela boken ett block), versblock kräver 3–200 rader + medianradlängd ≤ 85 (tab-exporter ≠ vers; 2-radersblock med kort första rad = rubrik+undertitel), page_mode (medianblock > 25 rader = sidformat → gamla radjoinen, Sherlock-klassen), avstavningsdetektering, dekorationsviktad dominansröstning (centrerade CAPS röstar inte), titelregel tillåter ledande siffra | 0.935/0.817/0.872 (oförändr.) | 0.948/0.989/0.968 (oförändr.) |
+
+Styckesprint 3 ändrar inte golden set — vinsterna ligger i korpusen:
+Ender's Game 1→28, Sign of the Four 1→30, Adventures/Case Book återställda,
+2061 3→**62** (perfekta "1 The Frozen Years"-titlar), Mote in God's Eye 8→40,
+Cat who Walks/Gor-böckerna/Street Lawyer räddade. Kvarvarande kända
+begränsningar: OCR-skadade filer med rubrik inklistrad i brödtexten
+(All Tomorrows Parties 8, Contact 19) och sex småfiler 2–3→1 kapitel.
+
 Styckesprint 2 per bok (stycke-F1): C&P 0.995, Leaves 0.819→**0.980** (versblock
 med långa Whitman-rader klassades som prosa av fyllnadsskyddet — jämnhetstestet
 skiljer brev [66,66,66,64,65] från vers [19,55,27,39]), P&P 0.890 (illustrations-

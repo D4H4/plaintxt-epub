@@ -71,7 +71,6 @@ class TextProcessor:
 
     @classmethod
     def is_chapter_heading(cls, line, prev_blank, next_blank):
-        indent = len(line) - len(line.lstrip())
         line = line.strip()
         if not line or len(line) > 100:
             return False
@@ -80,11 +79,6 @@ class TextProcessor:
         for pattern in cls.EXPLICIT_PATTERNS:
             if pattern.match(line):
                 return True
-        # Centrerade rader (djupt indrag) ar dekorationer — titelsidor,
-        # avsnittsmarkorer, forlagsreklam — inte kapitelrubriker, om de
-        # inte matchar ett explicit monster (ovan).
-        if indent >= 6:
-            return False
         # Reject single-char token patterns like "O O O O" or "C A S E : :"
         alpha_words = re.findall(r'[A-Za-z]+', line)
         if alpha_words and not any(len(w) >= 3 for w in alpha_words):
@@ -127,7 +121,10 @@ class TextProcessor:
         # ("One's-Self I Sing") och gemena funktionsord ("As I Ponder'd in
         # Silence") ska inte falla en akta titel.
         if 2 <= len(words) <= 8 and ',' not in line and not line.endswith('.'):
-            if words[0][0].isupper() and all(cls._title_word(w) for w in words):
+            # Ledande siffra tillaten: "1 The Frozen Years" (nummer +
+            # titel utan skiljetecken — 2061-klassen)
+            if ((words[0][0].isupper() or words[0].isdigit())
+                    and all(cls._title_word(w) for w in words)):
                 return True
         return False
 
@@ -270,6 +267,10 @@ class TextProcessor:
         text = text.replace(cr + lf, lf).replace(cr, lf)
         # Strip NULL bytes and non-printable control chars (keep \t and \n)
         text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+        # Rader med bara whitespace ar avsedda blankrader — normalisera,
+        # annars uteblir blockdelningen ("\n  \n" splittar inte "\n\n"):
+        # Ender's Game-klassen av filer blev ETT jatteblock och kollapsade.
+        text = re.sub(r"(?m)^[ \t]+$", "", text)
         # Replace double/triple hyphens with em dash
         text = re.sub(r"--+", "\u2014", text)
         # Detect page/column wrap width to distinguish soft wraps from
@@ -285,6 +286,15 @@ class TextProcessor:
             return (lf + lf).join(keep)
         text = re.sub(r"\[Illustration[^\[\]]*\]", _illustration_repl, text)
         blocks = text.split(lf + lf)
+        # Dokumentlage: ar blankradsblocken STYCKEN (PG-stil, median ~5
+        # rader) eller SIDOR (sidformaterade filer: blankrad per sidbrytning,
+        # median ~50 — Sherlock Holmes-klassen)? Sidblock far inte joinas
+        # till jattestycken som svaljer rubrikerna — dar galler den gamla
+        # radjoin-heuristiken i stallet.
+        sizes = sorted(
+            sum(1 for l in b.split(lf) if l.strip())
+            for b in blocks if b.strip())
+        page_mode = bool(sizes) and sizes[len(sizes) // 2] > 25
         result_blocks = []
         for block in blocks:
             orig_lines = [l for l in block.split(lf) if l.strip()]
@@ -292,18 +302,33 @@ class TextProcessor:
                 continue
             stripped = [l.strip() for l in orig_lines]
             if len(orig_lines) == 1:
-                # Behall vansterindraget: centrerade dekorationsrader
-                # (titelsidor, avsnittsmarkorer) avvisas pa det i
-                # is_chapter_heading. Strippas vid HTML-rendering.
+                # Behall vansterindraget — detect_chapters anvander det for
+                # att skilja centrerade dekorationer fran rubriker.
+                # Strippas vid HTML-rendering.
                 result_blocks.append([orig_lines[0].rstrip()])
                 continue
             # Versblock: indenterade rader (PG satter vers med 2+ mellanslags
             # indrag; prosa och pjasrepliker ar vansterstallda) som inte
             # fyller radbrytningsbredden. Radbrytningarna ar avsiktliga —
             # bevara dem (renderas som <br/> i EPUB:en).
+            # Storleksgrans: en "strof" pa hundratals rader ar ingen strof
+            # utan en indenterad fil utan blockstruktur — prosavagen. Och
+            # ett TVAradersblock ar nastan aldrig en strof men nastan
+            # alltid rubrik + undertitel ("CHAPTER I. / THE SCIENCE OF
+            # DEDUCTION.", "1 / The Frozen Years") — prosajoin.
+            # Radlangdsgrans: versrader ar korta (~<= 75 tecken aven hos
+            # Whitman); tab-indenterad stycke-per-rad (90-talsexporter,
+            # median 150+) ar prosa.
             indented = sum(1 for l in orig_lines
                            if l.startswith("  ") or l.startswith("\t"))
-            if indented * 3 >= len(orig_lines) * 2:
+            linelens = sorted(len(l) for l in stripped)
+            median_len = linelens[len(linelens) // 2]
+            # Tvaradersblock: rubrik + undertitel om forsta raden ar kort
+            # ("1" / "CHAPTER I."), verspar (couplet) annars.
+            two_line_heading = (len(stripped) == 2 and len(stripped[0]) <= 12)
+            if (len(orig_lines) <= 200 and median_len <= 85
+                    and not two_line_heading
+                    and indented * 3 >= len(orig_lines) * 2):
                 # Indenterad PROSA (brev, blockcitat) skiljs fran vers pa
                 # att den ar jamn: uniform indentering och alla rader utom
                 # den sista wrap-fyllda. Vers ar ojamn i bade radlangd och
@@ -323,7 +348,13 @@ class TextProcessor:
             # Undantag: jattelika block (ingen blankradsstruktur) far ga
             # genom den gamla heuristiken i stallet for att bli ett
             # monsterstycke.
-            if len(stripped) > 60:
+            # Avstavade radslut ("ques-/tionable") avslojar hart radbruten
+            # skanna-prosa (Adventures-klassen): dar ar stora block SIDOR,
+            # inte stycken, aven om filens median ar lag.
+            hyphen_wrapped = sum(
+                1 for l in stripped[:-1] if l.endswith("-")) >= 3
+            if page_mode or len(stripped) > 60 or (
+                    len(stripped) > 25 and hyphen_wrapped):
                 result_blocks.append(cls._split_wrapped_block(stripped, wrap))
             else:
                 result_blocks.append([chr(32).join(stripped)])
@@ -392,19 +423,31 @@ class TextProcessor:
         return kept
 
     @classmethod
-    def _suppress_nondominant(cls, chapter_starts):
+    def _suppress_nondominant(cls, chapter_starts, is_decor=None):
         """Filtrera icke-explicita kandidater nar de explicita monstren
         dominerar (se DOMINANT_MIN_*). Alla explicita monster overlever —
-        blandade strukturer (PART + CHAPTER, ACT + SCENE) rors inte."""
+        blandade strukturer (PART + CHAPTER, ACT + SCENE) rors inte.
+
+        is_decor(line_idx): dekorationsmisstankta kandidater (centrerade
+        ALL-CAPS-rader — titelsidor, forlagsreklam) far inte ROSTA i
+        andelsberakningen (annars spader skrapet ut de explicita och
+        stanger av just den mekanism som skulle ta bort det — Dracula),
+        men stryks som alla andra icke-explicita nar dominans rader.
+        Bocker vars AKTA rubriker ar centrerade CAPS (2061, Street Lawyer)
+        saknar explicit struktur -> ingen dominans -> rubrikerna overlever."""
         if not chapter_starts:
             return chapter_starts
         explicit = [
             any(p.match(title) for p in cls.EXPLICIT_PATTERNS)
             for _, title in chapter_starts
         ]
+        voters = [
+            is_exp for (idx, _), is_exp in zip(chapter_starts, explicit)
+            if is_exp or is_decor is None or not is_decor(idx)
+        ]
         n_explicit = sum(explicit)
-        if (n_explicit >= cls.DOMINANT_MIN_COUNT
-                and n_explicit / len(chapter_starts) >= cls.DOMINANT_MIN_FRACTION):
+        if (n_explicit >= cls.DOMINANT_MIN_COUNT and voters
+                and n_explicit / len(voters) >= cls.DOMINANT_MIN_FRACTION):
             return [cs for cs, is_exp in zip(chapter_starts, explicit) if is_exp]
         return chapter_starts
 
@@ -419,7 +462,11 @@ class TextProcessor:
             if cls.is_chapter_heading(line, prev_blank, next_blank):
                 chapter_starts.append((i, line.strip()))
         chapter_starts = cls._suppress_repeated(chapter_starts)
-        chapter_starts = cls._suppress_nondominant(chapter_starts)
+
+        def _is_decor(idx):
+            l = lines[idx]
+            return (len(l) - len(l.lstrip())) >= 6 and l.strip().isupper()
+        chapter_starts = cls._suppress_nondominant(chapter_starts, _is_decor)
         if not chapter_starts:
             return [("Content", text.strip())]
         # Brodtextlosa rubriker: en ensam ar en avdelarsida (PART I fore
