@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """PlainTXT-EPUB Converter - Desktop application."""
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
 import os
 import re
 import html as html_module
@@ -12,9 +10,19 @@ import threading
 import types
 import uuid
 
+HAS_TK = False
 HAS_DND = False
 HAS_EPUB = False
 HAS_PIL = False
+
+# GUI-beroendet ar valfritt: cli.py importerar TextProcessor/EPUBBuilder
+# headless (servrar, WSL, CI) — tkinter kravs forst nar GUI:t startas.
+try:
+    import tkinter as tk
+    from tkinter import ttk, filedialog, messagebox
+    HAS_TK = True
+except ImportError:
+    tk = None
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -783,6 +791,23 @@ def _add_tooltip(widget, text):
     widget.bind("<Leave>", _hide, add="+")
 
 
+def find_cover(txt_path):
+    """Leta upp en omslagsbild med samma filnamnsstam som txt-filen
+    (skiftlagesokansligt). Delas av GUI (singel + batch) och CLI."""
+    stem = Path(txt_path).stem
+    directory = Path(txt_path).parent
+    for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+        for candidate in (directory / (stem + ext),
+                          directory / (stem + ext.upper())):
+            if candidate.exists():
+                return str(candidate)
+        matches = [m for m in directory.glob("*" + ext)
+                   if m.stem.lower() == stem.lower()]
+        if matches:
+            return str(matches[0])
+    return ""
+
+
 def _cover_placeholder(parent):
     """Return a Canvas widget that draws a small gray book-icon."""
     c = tk.Canvas(parent, width=32, height=42, bg="white", highlightthickness=0)
@@ -1154,21 +1179,7 @@ class ConverterApp:
         except Exception:
             pass
 
-        cover_path = ""
-        stem = Path(path).stem
-        directory = Path(path).parent
-        for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
-            for candidate in [directory / (stem + ext), directory / (stem + ext.upper())]:
-                if candidate.exists():
-                    cover_path = str(candidate)
-                    break
-            if not cover_path:
-                matches = [m for m in directory.glob("*" + ext)
-                           if m.stem.lower() == stem.lower()]
-                if matches:
-                    cover_path = str(matches[0])
-            if cover_path:
-                break
+        cover_path = find_cover(path)
 
         item = types.SimpleNamespace(
             path=path,
@@ -1556,22 +1567,9 @@ class ConverterApp:
                                     before=self._single_content_frame)
         # Auto-detect a cover image with the same stem in the same directory
         if not self.cover_path.get():
-            stem = Path(path).stem
-            directory = Path(path).parent
-            for ext in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
-                for candidate in [directory / (stem + ext), directory / (stem + ext.upper())]:
-                    if candidate.exists():
-                        self._load_cover(str(candidate))
-                        break
-                else:
-                    # Case-insensitive glob fallback
-                    matches = list(directory.glob('*' + ext))
-                    matches = [m for m in matches if m.stem.lower() == stem.lower()]
-                    if matches:
-                        self._load_cover(str(matches[0]))
-                        break
-                if self.cover_path.get():
-                    break
+            _cover = find_cover(path)
+            if _cover:
+                self._load_cover(_cover)
 
     def _browse_cover(self):
         path = filedialog.askopenfilename(
@@ -1832,6 +1830,10 @@ def _expand_paths(paths):
 
 def _check_deps():
     ok = True
+    if not HAS_TK:
+        print("ERROR: tkinter is required for the GUI. "
+              "Use cli.py for headless conversion.")
+        ok = False
     if not HAS_EPUB:
         print("ERROR: ebooklib is required.  Run: pip install ebooklib")
         ok = False
