@@ -22,3 +22,4 @@ eval/golden/
 
 # Korpusdiagnostikens radata - filnamn ur privat samling, ska inte publiceras
 eval/corpus_results.csv
+eval/corpus_results_baseline.csv

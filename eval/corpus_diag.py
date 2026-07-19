@@ -28,8 +28,7 @@ for i, path in enumerate(files):
     t0 = time.time()
     try:
         row["kb"] = os.path.getsize(path) // 1024
-        with open(path, encoding="utf-8", errors="replace") as f:
-            raw = f.read()
+        raw = TextProcessor.read_text_file(path)
         cleaned = TextProcessor.clean_text(raw)
         chapters = TextProcessor.detect_chapters(cleaned)
         cc = nonws(cleaned)
