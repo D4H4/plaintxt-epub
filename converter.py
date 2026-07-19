@@ -1816,16 +1816,19 @@ def _parse_drop_paths(data):
 
 
 def _expand_paths(paths):
-    """Expand directories to their immediate .txt contents; silently drop non-.txt files."""
+    """Expand directories RECURSIVELY to contained .txt files; silently
+    drop non-.txt files. Dedupe preserves first-seen order."""
     result = []
     for p in paths:
         if os.path.isdir(p):
-            for name in sorted(os.listdir(p)):
-                if name.lower().endswith(".txt"):
-                    result.append(os.path.join(p, name))
+            for root, dirs, names in os.walk(p):
+                dirs.sort()
+                for name in sorted(names):
+                    if name.lower().endswith(".txt"):
+                        result.append(os.path.join(root, name))
         elif p.lower().endswith(".txt"):
             result.append(p)
-    return result
+    return list(dict.fromkeys(result))
 
 
 def _check_deps():
