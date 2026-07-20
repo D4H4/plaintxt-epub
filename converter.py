@@ -840,6 +840,7 @@ class ConverterApp:
         # Batch mode state
         self._mode             = "single"
         self._queue            = []          # list of types.SimpleNamespace items
+        self._batch_running    = False       # worker-trad aktiv — las kon
         self._batch_out_dir    = tk.StringVar()
         self._queue_canvas     = None        # set by _build_batch_ui
         self._queue_inner      = None        # inner frame for queue rows
@@ -1144,6 +1145,8 @@ class ConverterApp:
         self._single_clear_btn.pack_forget()
 
     def _clear_queue(self):
+        if self._batch_running:
+            return
         for item in list(self._queue):
             if item.row_frame:
                 item.row_frame.destroy()
@@ -1267,7 +1270,7 @@ class ConverterApp:
         self._queue_canvas.configure(scrollregion=self._queue_canvas.bbox("all"))
 
     def _remove_queue_item(self, item):
-        if item not in self._queue:
+        if self._batch_running or item not in self._queue:
             return
         self._queue.remove(item)
         if item.row_frame:
@@ -1300,73 +1303,109 @@ class ConverterApp:
             return
 
         self.convert_btn.config(state="disabled")
-        total = len(self._queue)
+        self._batch_running = True
 
-        for idx, item in enumerate(list(self._queue)):
-            self._set_item_status(item, "Reading\u2026", MUTED)
-            self.status_msg.set(
-                "Book " + str(idx + 1) + "/" + str(total) + ": " + item.title_var.get()
-            )
-            self.root.update()
+        # Tk-variabler far bara roras fran main-traden — snapshot per bok innan
+        # workern startar (inline-redigeringar under korning ignoreras medvetet)
+        jobs = [types.SimpleNamespace(
+                    item=item,
+                    path=item.path,
+                    title=item.title_var.get(),
+                    author=item.author_var.get(),
+                    lang=item.lang_var.get(),
+                    cover_path=item.cover_path,
+                    auto_accept=item.auto_accept.get(),
+                ) for item in self._queue]
+        threading.Thread(
+            target=self._run_batch,
+            args=(jobs, out_dir, self.clean_lines.get(), self.auto_chapters.get()),
+            daemon=True,
+        ).start()
+
+    def _run_batch(self, jobs, out_dir, clean, auto_ch):
+        total = len(jobs)
+        for idx, job in enumerate(jobs):
+            item = job.item
+            self._set_item_status_async(item, "Reading…", MUTED)
+            self._set_status(
+                "Book " + str(idx + 1) + "/" + str(total) + ": " + job.title)
 
             try:
-                if os.path.getsize(item.path) < 5 * 1024:
+                if os.path.getsize(job.path) < 5 * 1024:
                     # Skrapfiler (torrent-reklam, "read me" o.d.) — hoppa over
-                    self._set_item_status(item, "Skipped - tiny file (< 5 KB)", MUTED)
+                    self._set_item_status_async(
+                        item, "Skipped - tiny file (< 5 KB)", MUTED)
                     continue
-                raw = TextProcessor.read_text_file(item.path)
+                raw = TextProcessor.read_text_file(job.path)
                 struct_warn = None
-                text = TextProcessor.clean_text(raw) if self.clean_lines.get() else raw
+                text = TextProcessor.clean_text(raw) if clean else raw
 
-                if self.auto_chapters.get():
+                if auto_ch:
                     chapters = TextProcessor.detect_chapters(text)
                     struct_warn = TextProcessor.structure_warning(raw, len(chapters))
-                    if item.auto_accept.get():
-                        # Use all detected chapters without showing the dialog
-                        pass
-                    else:
-                        self._set_item_status(item, "Verifying\u2026", MUTED)
-                        self.root.update()
-                        dlg = ChapterVerifyDialog(self.root, chapters,
-                                                 book_title=item.title_var.get(),
-                                                 book_index=idx + 1,
-                                                 total_books=total,
-                                                 cover_path=item.cover_path)
-                        if dlg.result is None:
-                            self._set_item_status(item, "Skipped", MUTED)
+                    if not job.auto_accept:
+                        self._set_item_status_async(item, "Verifying…", MUTED)
+                        result = self._verify_on_main(chapters, job, idx, total)
+                        if result is None:
+                            self._set_item_status_async(item, "Skipped", MUTED)
                             continue
-                        chapters = dlg.result or [("Content", text.strip())]
+                        chapters = result or [("Content", text.strip())]
                 else:
                     chapters = [("Content", text.strip())]
 
-                safe = (re.sub(r"[^\w\s\-]", "", item.title_var.get()).strip()
+                safe = (re.sub(r"[^\w\s\-]", "", job.title).strip()
                         .replace(" ", "_") or "book")
                 out_path = _unique_path(out_dir, safe + ".epub")
 
-                self._set_item_status(item, "Building\u2026", MUTED)
-                self.root.update()
+                self._set_item_status_async(item, "Building…", MUTED)
                 EPUBBuilder.build(
-                    title=item.title_var.get() or Path(item.path).stem,
-                    author=item.author_var.get() or "Unknown Author",
-                    language=item.lang_var.get() or "en",
+                    title=job.title or Path(job.path).stem,
+                    author=job.author or "Unknown Author",
+                    language=job.lang or "en",
                     chapters=chapters,
-                    cover_path=item.cover_path or None,
+                    cover_path=job.cover_path or None,
                     output_path=out_path,
                 )
                 if struct_warn:
-                    self._set_item_status(
-                        item, "\u26a0 Done - poor text structure", "#c77700")
+                    self._set_item_status_async(
+                        item, "⚠ Done - poor text structure", "#c77700")
                 else:
-                    self._set_item_status(item, "\u2713 Done", "#2a9d2a")
+                    self._set_item_status_async(item, "✓ Done", "#2a9d2a")
 
             except Exception as exc:
-                self._set_item_status(item, "\u2717 " + str(exc)[:30], "#cc2222")
+                self._set_item_status_async(item, "✗ " + str(exc)[:30], "#cc2222")
 
-            self.root.update()
+        self.root.after(0, self._batch_finished, out_dir, total)
 
+    def _verify_on_main(self, chapters, job, idx, total):
+        """Oppna ChapterVerifyDialog pa main-traden och blockera workern tills
+        den stangts. Returnerar dlg.result (None = hoppa over boken)."""
+        done = threading.Event()
+        holder = {"result": None}
+
+        def show():
+            try:
+                dlg = ChapterVerifyDialog(self.root, chapters,
+                                          book_title=job.title,
+                                          book_index=idx + 1,
+                                          total_books=total,
+                                          cover_path=job.cover_path)
+                holder["result"] = dlg.result
+            finally:
+                done.set()
+
+        self.root.after(0, show)
+        done.wait()
+        return holder["result"]
+
+    def _set_item_status_async(self, item, text, color):
+        self.root.after(0, self._set_item_status, item, text, color)
+
+    def _batch_finished(self, out_dir, total):
+        self._batch_running = False
         self.convert_btn.config(state="normal")
         done = sum(1 for i in self._queue
-                   if i.status_var.get().startswith(("\u2713", "\u26a0 Done")))
+                   if i.status_var.get().startswith(("✓", "⚠ Done")))
         self.status_msg.set(
             "Batch complete: " + str(done) + "/" + str(total)
             + " converted.  Output: " + out_dir
